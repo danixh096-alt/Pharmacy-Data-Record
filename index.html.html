@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alyan Pharmacy</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{margin:0;font-family:'Poppins',sans-serif;background:#f1f1f1;}
+nav{background:#007bff;padding:15px;color:white;font-size:28px;font-weight:bold;text-align:center;}
+.authbox, .container{background: rgba(255,255,255,0.95);border-radius:12px;padding:25px;margin:40px auto;max-width:1000px;box-shadow:0 5px 20px rgba(0,0,0,0.3);}
+.authbox input, .container input, .container select, .container button{width:100%;padding:10px;margin:8px 0;border:1px solid #aaa;border-radius:8px;}
+.authbtn, .container button{background:#007bff;color:white;border:none;cursor:pointer;}
+.authbtn:hover, .container button:hover{background:#0056b3;}
+.table{width:100%;border-collapse:collapse;margin-top:12px;}
+.table th, .table td{border:1px solid #222;padding:8px;text-align:center;}
+.table th{background:#007bff;color:white;}
+.button-bar{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+.button-bar button{flex:1;}
+#charts{display:flex;flex-wrap:wrap;gap:20px;justify-content:center;margin-top:20px;}
+.chart-container{background:white;border-radius:12px;padding:20px;width:450px;box-shadow:0 5px 15px rgba(0,0,0,0.3);}
+#receiptModal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background: rgba(0,0,0,0.6);}
+#receiptModal .modalcontent{background:white;width:400px;padding:20px;margin:60px auto;border-radius:10px;}
+#salesModal{display:none;position:fixed;top:10px;left:5%;width:90%;height:80%;background:white;overflow:auto;border-radius:10px;box-shadow:0 5px 25px rgba(0,0,0,0.4);padding:15px;}
+</style>
+</head>
+<body>
+<nav>Alyan Pharmacy</nav>
+
+<!-- LOGIN -->
+<div class="authbox" id="loginBox">
+<h2>Login</h2>
+<input type="text" id="loginUser" placeholder="Username">
+<input type="password" id="loginPass" placeholder="Password">
+<button class="authbtn" onclick="login()">Login</button>
+<p style="text-align:right;cursor:pointer;color:#007bff;" onclick="showForgot()">Forgot Password?</p>
+</div>
+
+<!-- FORGOT -->
+<div class="authbox" id="forgotBox" style="display:none;">
+<h2>Forgot Password</h2>
+<pre id="forgotTxt"></pre>
+<button class="authbtn" onclick="showLogin()">Back</button>
+</div>
+
+<!-- DASHBOARD -->
+<div class="container" id="dashboard" style="display:none;">
+<h2>Welcome, <span id="currentUser"></span></h2>
+
+<div class="button-bar">
+<button onclick="showHome()">Home</button>
+<button onclick="showMedicineList()">Medicine List</button>
+<button onclick="viewSalesHistory()">Sales History</button>
+<button onclick="changePassword()">Change Password</button>
+<button onclick="logout()">Logout</button>
+</div>
+
+<!-- Add Medicine -->
+<input type="text" id="medName" placeholder="Medicine Name">
+<input type="number" id="medQty" placeholder="Quantity">
+<input type="number" id="medPrice" placeholder="Price">
+<select id="medCategory">
+<option value="">Select Category</option>
+<option value="Antibiotic">Antibiotic</option>
+<option value="Painkiller">Painkiller</option>
+<option value="Vitamin">Vitamin</option>
+<option value="Antihistamine">Antihistamine</option>
+<option value="Syrup">Syrup</option>
+<option value="Other">Other</option>
+</select>
+<button onclick="addMedicine()">Add / Update Medicine</button>
+
+<!-- Search -->
+<input type="text" id="search" placeholder="Search Medicine or Category" oninput="renderTable()" list="medList">
+<datalist id="medList"></datalist>
+
+<!-- Medicines Table -->
+<table class="table" id="medTable">
+<thead>
+<tr><th>ID</th><th>Name</th><th>Category</th><th>Stock</th><th>Price</th><th>Total</th><th>Action</th><th>Sell</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<h3>Total Stock Value: <span id="stockValue">0</span></h3>
+
+<!-- Charts -->
+<div id="charts">
+<div class="chart-container">
+<canvas id="dailySalesChart"></canvas>
+</div>
+<div class="chart-container">
+<canvas id="medicineStockChart"></canvas>
+</div>
+</div>
+</div>
+
+<!-- Receipt Modal -->
+<div id="receiptModal">
+<div class="modalcontent">
+<h3>Receipt</h3>
+<pre id="receiptText"></pre>
+<button onclick="closeReceipt()">Close</button>
+</div>
+</div>
+
+<!-- Sales History Modal -->
+<div id="salesModal">
+<h3>Sales History</h3>
+<pre id="salesText"></pre>
+<button onclick="closeSales()">Close</button>
+</div>
+
+<script>
+// Users
+let USERS = [{username:'admin',password:'765620'}];
+let currentUser='';
+
+// Master list of medicines with categories (~100+)
+const masterMedicines = [
+{name:"Paracetamol",category:"Painkiller"}, {name:"Ibuprofen",category:"Painkiller"}, {name:"Aspirin",category:"Painkiller"},
+{name:"Amoxicillin",category:"Antibiotic"}, {name:"Azithromycin",category:"Antibiotic"}, {name:"Cefixime",category:"Antibiotic"},
+{name:"Ceftriaxone",category:"Antibiotic"}, {name:"Doxycycline",category:"Antibiotic"}, {name:"Metformin",category:"Other"},
+{name:"Insulin",category:"Other"}, {name:"Vitamin C",category:"Vitamin"}, {name:"Vitamin D3",category:"Vitamin"},
+{name:"Levocetirizine",category:"Antihistamine"}, {name:"Cetirizine",category:"Antihistamine"}, {name:"Fexofenadine",category:"Antihistamine"},
+{name:"Cough Syrup",category:"Syrup"}, {name:"Salbutamol Syrup",category:"Syrup"}, {name:"Multivitamin Syrup",category:"Syrup"},
+// ... add more up to 100+ medicines as needed
+];
+
+// Load meds from localStorage
+let meds = JSON.parse(localStorage.getItem('meds')) || [];
+let sales = JSON.parse(localStorage.getItem('sales')) || [];
+let medIdCounter = meds.length?Math.max(...meds.map(m=>m.id))+1:1;
+
+// Login Functions
+function login(){
+    let u=document.getElementById('loginUser').value;
+    let p=document.getElementById('loginPass').value;
+    let user=USERS.find(x=>x.username===u && x.password===p);
+    if(user){
+        currentUser=u;
+        document.getElementById('loginBox').style.display='none';
+        document.getElementById('dashboard').style.display='block';
+        document.getElementById('currentUser').textContent=currentUser;
+        renderTable();
+        updateCharts();
+    } else alert('Invalid Credentials!');
+}
+function showForgot(){
+    document.getElementById('loginBox').style.display='none';
+    document.getElementById('forgotBox').style.display='block';
+    let txt='Users List:\n';
+    USERS.forEach(u=>txt+=`${u.username} : ${u.password}\n`);
+    document.getElementById('forgotTxt').textContent=txt;
+}
+function showLogin(){ document.getElementById('forgotBox').style.display='none'; document.getElementById('loginBox').style.display='block'; }
+function logout(){ location.reload(); }
+
+// Add Medicine
+function addMedicine(){
+    let name=document.getElementById('medName').value.trim();
+    let qty=parseInt(document.getElementById('medQty').value);
+    let price=parseFloat(document.getElementById('medPrice').value);
+    let category=document.getElementById('medCategory').value;
+    if(!name||isNaN(qty)||isNaN(price)||!category){ alert('Enter valid data'); return; }
+
+    let exists = meds.find(m=>m.name.toLowerCase()==name.toLowerCase());
+    if(exists){ exists.quantity += qty; exists.price = price; exists.category = category; }
+    else { meds.push({id: medIdCounter++, name, quantity:qty, price, category}); }
+    localStorage.setItem('meds',JSON.stringify(meds));
+    document.getElementById('medName').value=''; document.getElementById('medQty').value=''; document.getElementById('medPrice').value=''; document.getElementById('medCategory').value='';
+    renderTable(); updateCharts();
+}
+
+// Render Table & Autocomplete
+function renderTable(){
+    let search=document.getElementById('search').value.toLowerCase();
+    let tbody=document.querySelector('#medTable tbody'); tbody.innerHTML='';
+    let totalStock=0;
+    let datalist = document.getElementById('medList'); datalist.innerHTML='';
+    masterMedicines.forEach(med=>{ let opt=document.createElement('option'); opt.value=med.name; datalist.appendChild(opt); });
+
+    let combined = [...new Set([...masterMedicines.map(m=>m.name), ...meds.map(m=>m.name)])];
+    combined.filter(m=>m.toLowerCase().includes(search)).forEach((name,index)=>{
+        let medObj = meds.find(x=>x.name==name);
+        let category = medObj?medObj.category: masterMedicines.find(m=>m.name==name)?.category || "Other";
+        let qty = medObj?medObj.quantity:0;
+        let price = medObj?medObj.price:0;
+        tbody.innerHTML += `<tr>
+<td>${index+1}</td><td>${name}</td><td>${category}</td><td>${qty}</td><td>${price}</td><td>${(qty*price).toFixed(2)}</td>
+<td>${qty>0?'<button onclick="removeMedByName(\''+name+'\')">Delete</button>':''}</td>
+<td>${qty>0?'<button onclick="sellMedByName(\''+name+'\')">Sell</button>':''}</td>
+</tr>`;
+        totalStock += qty*price;
+    });
+    document.getElementById('stockValue').textContent=totalStock.toFixed(2);
+}
+
+// Delete / Sell by Name
+function removeMedByName(name){ meds = meds.filter(m=>m.name!=name); renderTable(); updateCharts(); }
+function sellMedByName(name){
+    let med = meds.find(m=>m.name==name);
+    if(!med){ alert('Medicine not in stock'); return; }
+    let qty = parseInt(prompt('Enter sell quantity (Available:'+med.quantity+')'));
+    if(isNaN(qty)||qty<=0||qty>med.quantity){ alert('Invalid qty'); return; }
+    med.quantity -= qty;
+    let total = (qty*med.price).toFixed(2);
+    let date = new Date().toLocaleString();
+    sales.push({user:currentUser, med:med.name, qty, price:med.price, total, date});
+    localStorage.setItem('sales',JSON.stringify(sales));
+    let receipt = `===== Alyan Pharmacy Receipt =====\nUser: ${currentUser}\nDate: ${date}\nMedicine: ${med.name}\nQty: ${qty}\nUnit Price: ${med.price}\nTotal: ${total}\nThank You!\n============================`;
+    document.getElementById('receiptText').textContent=receipt;
+    document.getElementById('receiptModal').style.display='block';
+    renderTable(); updateCharts();
+}
+
+function closeReceipt(){ document.getElementById('receiptModal').style.display='none'; }
+function viewSalesHistory(){ let txt=''; sales.forEach((s,i)=>txt+=`#${i+1} | ${s.date} | ${s.user} | ${s.med} | Qty:${s.qty} | Total:${s.total}\n`); document.getElementById('salesText').textContent=txt; document.getElementById('salesModal').style.display='block'; }
+function closeSales(){ document.getElementById('salesModal').style.display='none'; }
+function changePassword(){ let oldP=prompt('Enter current password:'); let u=USERS.find(x=>x.username===currentUser); if(oldP===u.password){ let newP=prompt('Enter new password:'); if(newP){ u.password=newP; alert('Changed!'); } } else alert('Incorrect!'); }
+function exportData(){ let csv='ID,Name,Category,Stock,Price,Total\n'; meds.forEach(m=>{ csv+=`${m.id},${m.name},${m.category},${m.quantity},${m.price},${(m.quantity*m.price).toFixed(2)}\n`; }); let blob=new Blob([csv],{type:'text/csv'}); let url=URL.createObjectURL(blob); let a=document.createElement('a'); a.href=url; a.download='alyan_pharmacy_medicines.csv'; a.click(); }
+
+// Home & Medicine List
+function showHome(){ renderTable(); }
+function showMedicineList(){ renderTable(); }
+
+// Charts
+let dailySalesChart, medicineStockChart;
+function updateCharts(){
+    let daily = {}; let today=new Date();
+    for(let i=6;i>=0;i--){ let d=new Date(today); d.setDate(today.getDate()-i); daily[d.toLocaleDateString()]=0; }
+    sales.forEach(s=>{ let d=new Date(s.date).toLocaleDateString(); if(d in daily) daily[d]+=parseFloat(s.total); });
+    let dailyLabels = Object.keys(daily); let dailyData = Object.values(daily);
+    if(dailySalesChart) dailySalesChart.destroy();
+    let ctx1=document.getElementById('dailySalesChart').getContext('2d');
+    dailySalesChart=new Chart(ctx1,{type:'bar',data:{labels:dailyLabels,datasets:[{label:'Daily Sales',data:dailyData,backgroundColor:'#007bff'}]},options:{plugins:{legend:{display:false}}}});
+    let medLabels = meds.map(m=>m.name); let medData = meds.map(m=>m.quantity);
+    if(medicineStockChart) medicineStockChart.destroy();
+    let ctx2=document.getElementById('medicineStockChart').getContext('2d');
+    medicineStockChart=new Chart(ctx2,{type:'pie',data:{labels:medLabels,datasets:[{label:'Stock',data:medData,backgroundColor:medLabels.map(()=>`#${Math.floor(Math.random()*16777215).toString(16)}`)}]},options:{plugins:{legend:{position:'right'}}}});
+}
+</script>
+</body>
+</html>
